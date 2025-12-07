@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kanban Simples</title>
+  <link rel="stylesheet" href="./src/style.css" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div id="app">
+    <header class="app-header">
+      <h1>Kanban Board</h1>
+      <button id="add-task-btn" class="btn primary">
+        <span>+</span> Nova Tarefa
+      </button>
+    </header>
+
+    <main class="board">
+      <div class="column" data-status="todo">
+        <div class="column-header">
+          <h2>A Fazer</h2>
+          <span class="count" id="count-todo">0</span>
+        </div>
+        <div class="column-content" id="column-todo">
+          <!-- Tasks will be injected here -->
+        </div>
+      </div>
+
+      <div class="column" data-status="inprogress">
+        <div class="column-header">
+          <h2>Em Progresso</h2>
+          <span class="count" id="count-inprogress">0</span>
+        </div>
+        <div class="column-content" id="column-inprogress">
+          <!-- Tasks will be injected here -->
+        </div>
+      </div>
+
+      <div class="column" data-status="done">
+        <div class="column-header">
+          <h2>Concluído</h2>
+          <span class="count" id="count-done">0</span>
+        </div>
+        <div class="column-content" id="column-done">
+          <!-- Tasks will be injected here -->
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div id="task-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title">Nova Tarefa</h2>
+        <button id="close-modal" class="btn-icon">&times;</button>
+      </div>
+      <form id="task-form">
+        <div class="form-group">
+          <label for="task-title">Título</label>
+          <input type="text" id="task-title" required placeholder="Ex: Criar Wireframe" />
+        </div>
+        <div class="form-group">
+          <label for="task-desc">Descrição</label>
+          <textarea id="task-desc" rows="4" placeholder="Detalhes da tarefa..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="task-priority">Prioridade</label>
+          <select id="task-priority">
+            <option value="low">Baixa</option>
+            <option value="medium" selected>Média</option>
+            <option value="high">Alta</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="task-due-date">Data de Entrega</label>
+          <input type="date" id="task-due-date" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn secondary" id="cancel-btn">Cancelar</button>
+          <button type="submit" class="btn primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
