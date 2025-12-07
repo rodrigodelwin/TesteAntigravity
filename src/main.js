@@ -1,7 +1,8 @@
+import { supabase } from './supabaseClient.js'
+
 /**
- * Simple Kanban State Management
+ * Kanban State Management with Supabase
  */
-const STORAGE_KEY = 'kanban-data';
 
 const state = {
   tasks: [],
@@ -25,7 +26,6 @@ const modal = {
   title: document.getElementById('modal-title'),
   form: document.getElementById('task-form'),
   inputTitle: document.getElementById('task-title'),
-  inputTitle: document.getElementById('task-title'),
   inputDesc: document.getElementById('task-desc'),
   inputPriority: document.getElementById('task-priority'),
   inputDueDate: document.getElementById('task-due-date'),
@@ -37,55 +37,114 @@ const addTaskBtn = document.getElementById('add-task-btn');
 
 let currentEditingId = null;
 
-// --- Persistence ---
-function loadState() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    try {
-      state.tasks = JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to parse state', e);
-      state.tasks = [];
+// --- Supabase Functions ---
+async function fetchTasks() {
+  try {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    state.tasks = data.map(task => ({
+      id: task.id,
+      title: task.title,
+      description: task.description || '',
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.due_date || '',
+      createdAt: task.created_at,
+    }));
+
+    render();
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+    alert('Erro ao carregar tarefas. Verifique sua conexão com o Supabase.');
+  }
+}
+
+async function createTask(title, description, priority = 'medium', dueDate = '', status = 'todo') {
+  try {
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([
+        {
+          title,
+          description: description || null,
+          status,
+          priority,
+          due_date: dueDate || null,
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Add to local state
+    state.tasks.unshift({
+      id: data.id,
+      title: data.title,
+      description: data.description || '',
+      status: data.status,
+      priority: data.priority,
+      dueDate: data.due_date || '',
+      createdAt: data.created_at,
+    });
+
+    render();
+  } catch (error) {
+    console.error('Error creating task:', error);
+    alert('Erro ao criar tarefa.');
+  }
+}
+
+async function updateTask(id, updates) {
+  try {
+    // Map frontend field names to database column names
+    const dbUpdates = {};
+    if ('title' in updates) dbUpdates.title = updates.title;
+    if ('description' in updates) dbUpdates.description = updates.description || null;
+    if ('status' in updates) dbUpdates.status = updates.status;
+    if ('priority' in updates) dbUpdates.priority = updates.priority;
+    if ('dueDate' in updates) dbUpdates.due_date = updates.dueDate || null;
+
+    const { error } = await supabase
+      .from('tasks')
+      .update(dbUpdates)
+      .eq('id', id);
+
+    if (error) throw error;
+
+    // Update local state
+    const task = state.tasks.find((t) => t.id === id);
+    if (task) {
+      Object.assign(task, updates);
+      render();
     }
-  }
-  render();
-}
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
-  render();
-}
-
-// --- Logic ---
-function createTask(title, description, priority = 'medium', dueDate = '', status = 'todo') {
-  const task = {
-    id: crypto.randomUUID(),
-    title,
-    description,
-    priority,
-    dueDate,
-    status,
-    createdAt: new Date().toISOString(),
-  };
-  state.tasks.push(task);
-  saveState();
-}
-
-function updateTask(id, updates) {
-  const task = state.tasks.find((t) => t.id === id);
-  if (task) {
-    Object.assign(task, updates);
-    saveState();
+  } catch (error) {
+    console.error('Error updating task:', error);
+    alert('Erro ao atualizar tarefa.');
   }
 }
 
-function deleteTask(id) {
-  state.tasks = state.tasks.filter((t) => t.id !== id);
-  saveState();
-}
+async function deleteTask(id) {
+  try {
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id);
 
-function getTasksByStatus(status) {
-  return state.tasks.filter((t) => t.status === status);
+    if (error) throw error;
+
+    // Remove from local state
+    state.tasks = state.tasks.filter((t) => t.id !== id);
+    render();
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    alert('Erro ao excluir tarefa.');
+  }
 }
 
 // --- Rendering ---
@@ -124,16 +183,10 @@ function createTaskElement(task) {
 
   let dateHtml = `<div class="task-date">Criado em: ${date}</div>`;
   if (task.dueDate) {
-    const dueDateObj = new Date(task.dueDate);
-    // Simple comparison for overdue (ignoring time)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    // Be careful with timezone, input date is usually yyyy-mm-dd
-    // We treat the input date as local end of day or similar? defaulting to UTC?
-    // Let's stick to local date string comparison for simplicity or simple Date object
-    // Adding T00:00 to ensure local parsing, or just splitting string
     const [y, m, d] = task.dueDate.split('-');
     const due = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     const isOverdue = due < today && task.status !== 'done';
     const dueString = due.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
@@ -178,10 +231,10 @@ function createTaskElement(task) {
   });
 
   const deleteBtn = el.querySelector('.delete-btn');
-  deleteBtn.addEventListener('click', (e) => {
+  deleteBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
-      deleteTask(task.id);
+      await deleteTask(task.id);
     }
   });
 
@@ -200,7 +253,6 @@ let draggedItem = null;
 function handleDragStart(e) {
   draggedItem = this;
   this.classList.add('dragging');
-  // Hack to hide the element but keep it draggable ghost
   setTimeout(() => (this.style.display = 'none'), 0);
 }
 
@@ -208,14 +260,11 @@ function handleDragEnd(e) {
   this.classList.remove('dragging');
   this.style.display = 'block';
   draggedItem = null;
-  // Save state is redundant if drop didn't happen, but safe here.
-  // Actually drop handler handles data update.
 }
 
 document.querySelectorAll('.column-content').forEach((col) => {
   col.addEventListener('dragover', (e) => {
-    e.preventDefault(); // Allow drop
-    // Basic visual cue could go here
+    e.preventDefault();
   });
 
   col.addEventListener('dragenter', (e) => {
@@ -225,19 +274,14 @@ document.querySelectorAll('.column-content').forEach((col) => {
   col.addEventListener('drop', handleDrop);
 });
 
-function handleDrop(e) {
+async function handleDrop(e) {
   e.preventDefault();
   if (!draggedItem) return;
 
   const newStatus = this.parentElement.dataset.status;
   const taskId = draggedItem.dataset.id;
 
-  // Update state
-  updateTask(taskId, { status: newStatus });
-
-  // Re-render handled by updateTask -> saveState -> render
-  // No need to manually append child here since render does it full refresh.
-  // For production large apps, optimized DOM updates would be better.
+  await updateTask(taskId, { status: newStatus });
 }
 
 // --- Modal & Form ---
@@ -271,7 +315,7 @@ modal.element.addEventListener('click', (e) => {
   if (e.target === modal.element) closeModal();
 });
 
-modal.form.addEventListener('submit', (e) => {
+modal.form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const title = modal.inputTitle.value.trim();
   const description = modal.inputDesc.value.trim();
@@ -281,9 +325,9 @@ modal.form.addEventListener('submit', (e) => {
   if (!title) return;
 
   if (currentEditingId) {
-    updateTask(currentEditingId, { title, description, priority, dueDate });
+    await updateTask(currentEditingId, { title, description, priority, dueDate });
   } else {
-    createTask(title, description, priority, dueDate);
+    await createTask(title, description, priority, dueDate);
   }
   closeModal();
 });
@@ -291,4 +335,12 @@ modal.form.addEventListener('submit', (e) => {
 addTaskBtn.addEventListener('click', () => openModal());
 
 // --- Init ---
-loadState();
+fetchTasks();
+
+// Optional: Subscribe to realtime changes
+supabase
+  .channel('tasks-channel')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+    fetchTasks(); // Refresh when data changes
+  })
+  .subscribe();
